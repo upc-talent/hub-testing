@@ -574,6 +574,10 @@ function switchTrainerTab(id){
   if(id==='t-analytics') refreshAnalytics();
   if(id==='t-calendar') renderCalendar();
   if(id==='t-activity') loadActivity();
+  // reports tabs (assets/js/reports-admin.js)
+  if(id==='t-moodle' && typeof rpOpenMoodleTab==='function') rpOpenMoodleTab();
+  if(id==='t-sap' && typeof rpOpenSapTab==='function') rpOpenSapTab();
+  if(id==='t-repconf' && typeof rpOpenConfigTab==='function') rpOpenConfigTab();
 }
 
 /* Accounts: every staff member signs in with their own account, so every change is recorded under their name.
@@ -581,10 +585,13 @@ function switchTrainerTab(id){
    coordinator (UPC_Co, UPC_Co1, UPC_Co2) — lower access; the server refuses everything else for it too. */
 function isCoordinatorRole(){ return API.role==='coordinator'; }
 function isSuperAdmin(){ return API.role==='superadmin'; }
+// Moodle Reports / SAP Reports / Reports Configuration (class "reports-only"): superadmin + coordinators, never trainers.
+function isReportsAdmin(){ return API.role==='superadmin' || API.role==='coordinator'; }
 const ROLE_LABELS = {superadmin:'Super Admin', trainer:'Trainer', coordinator:'Coordinator'};
 // Coordinator tabs, in this order: Attendance (opens first) · Calendar (view only) · Analytics & Export (Master Sheet Preview only)
-// · General Configurations (Import Completion only). Trainers keep every tab in the usual order; the Activity Log tab is the superadmin's.
-const COORD_TABS = ['t-attend','t-calendar','t-analytics','t-setup'];
+// · Moodle Reports · SAP Reports · Reports Configuration. Trainers keep every tab in the usual order (without the reports
+// tabs); the Activity Log tab is the superadmin's.
+const COORD_TABS = ['t-attend','t-calendar','t-analytics','t-moodle','t-sap','t-repconf'];
 function applyRoleToPage(){
   const coord = isCoordinatorRole();
   // the CSS hooks keep their old "admin" names (admin-view / admin-hidden)
@@ -594,7 +601,8 @@ function applyRoleToPage(){
   const order = coord ? COORD_TABS.concat(bar._trainerOrder.filter(id=>!COORD_TABS.includes(id))) : bar._trainerOrder;
   order.forEach(id=>bar.appendChild(bar.querySelector(`.tab[data-tab="${id}"]`)));
   bar.querySelectorAll('.tab').forEach(t=>t.classList.toggle('hidden',
-    (coord && !COORD_TABS.includes(t.dataset.tab)) || (t.dataset.tab==='t-activity' && !isSuperAdmin())));
+    (coord && !COORD_TABS.includes(t.dataset.tab)) || (t.dataset.tab==='t-activity' && !isSuperAdmin())
+    || (t.classList.contains('reports-only') && !isReportsAdmin())));
   document.querySelectorAll('#t-analytics > *').forEach(el=>el.classList.toggle('admin-hidden', coord && el.id!=='masterSheetPreviewCard'));
   document.querySelectorAll('#t-setup > *').forEach(el=>el.classList.toggle('admin-hidden', coord && el.id!=='importCompletionCard'));
   const badge = document.getElementById('roleBadge');
@@ -3917,7 +3925,10 @@ const ACTIVITY_LABELS = {
   pharmacist_add:'Pharmacist added', pharmacist_edit:'Pharmacist edited', pharmacist_delete:'Pharmacist deleted',
   day_add:'Training day added', day_edit:'Training day edited', day_delete:'Training day deleted', setting:'Setting changed',
   approval:'Decision', approval_add:'Approval record added', approval_delete:'Approval record deleted', request:'Request sent',
-  request_cancel:'Request cancelled', submit:'Submitted', merge:'Group merge'
+  request_cancel:'Request cancelled', submit:'Submitted', merge:'Group merge', unmerge:'Group unmerged', merge_edit:'Group merge edited',
+  merge_delete:'Group merge deleted', course_add:'Course tracked', course_edit:'Course edited', course_delete:'Course deleted',
+  course_share_rotate:'Share link renewed', course_slots:'Core / Capsule courses set', course_publish:'Course data published',
+  lms_learner_save:'Onboarding learner saved', lms_learner_delete:'Onboarding learner removed'
 };
 const ROLE_NAMES = {superadmin:'Super Admin', trainer:'Trainer', coordinator:'Coordinator', supervisor:'Supervisor'};
 function ksaTime(isoStr){

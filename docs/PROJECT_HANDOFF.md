@@ -314,7 +314,7 @@ Open `http://localhost:5173/`. It talks to the **live Supabase backend** — the
 
 ## v5 — Reports (in progress — see docs/Hub_Reports_Integration_Plan.md)
 
-- **Done: Phase 1 (database) + Phase 2 (Edge Function).** Tables `courses`, `course_progress` (one row per learner per
+- **Done: Phase 1 (database), Phase 2 (Edge Function), Phase 3 (staff tabs).** Tables `courses`, `course_progress` (one row per learner per
   course; a publish replaces the course's rows), `course_uploads` (publish audit; never the exclusion list),
   `lms_learners` (onboarding people for completion reporting only — never part of the roster). Settings keys
   `coreCourseId` / `capsuleCourseId`.
@@ -330,3 +330,13 @@ Open `http://localhost:5173/`. It talks to the **live Supabase backend** — the
 - `pharmacists.completion_pct` / `capsule_pct` are kept but no longer read or written. Until Phase 4, the Attendance
   tab's Core / Capsule columns show "—" and the old Import Completion card no longer saves anything.
 - Fixed with this change: `patchMaster` declared `const s` twice (a v4 syntax error that would stop `api` deploying).
+- **Phase 3 (staff tabs)** — `assets/js/reports-admin.js` (all globals `rp*`), tabs `t-moodle`, `t-sap`, `t-repconf` (class
+  `reports-only`: superadmin + coordinator; `isReportsAdmin()`); coordinators no longer see General Configurations.
+  Moodle Reports ports the old tool: sheets read with `raw:true` (no locale date guessing); `rpParseTs` accepts
+  `YYYY-MM-DD HH:MM[:SS]`, `D/M/YYYY[ H:MM[ AM|PM]]` (day first), `[Weekday, ]D Month YYYY[, H:MM AM|PM]` and Excel serials,
+  all as KSA (UTC+3); anything else is "unreadable" → counted, shown with examples in the preview, and Publish needs an
+  explicit tick. Deadline = date + time + :59 s KSA. Engine settings (final videos, counted statuses, excluded videos) and
+  the deadline are saved on the course at publish; the exclusion list is never saved. `rpSelfTest()` runs with `?debug=1`.
+- `common.js`: `downloadStyledXlsx` takes `opts.autoName` and `opts.sheets` (multi-sheet), writes real numbers as numbers,
+  colours course states / roster match (`statusCols`); `reportFileName()`; `registerFilterScope()` lets new tables use
+  the cascading multi-select filters. SheetJS upgraded to 0.20.3 (re-test Master upload, Calendar import, Bulk Add).

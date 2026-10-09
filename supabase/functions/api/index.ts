@@ -1264,12 +1264,15 @@ async function courseSave(ctx: Ctx, c: any) {
   const clash = await sql`select id from courses where lower(name) = lower(${name}) and id <> ${id}`;
   if (clash.length) throw new Error("A course with that name is already tracked.");
   const sortOrder = Math.max(-100000, Math.min(100000, Math.round(Number(c.sortOrder) || 0)));
+  const prevRow = id ? await courseById(id) : null;
   const fields = {
     name, source, active: !!c.active, display_name: str(c.displayName, 150), category: str(c.category, 80),
-    sort_order: sortOrder, deadline: isoOrNull(c.deadline, "The deadline"),
+    sort_order: sortOrder,
+    // the deadline is normally set in Moodle Reports (on publish): an edit that doesn't send it keeps the stored one
+    deadline: "deadline" in c ? isoOrNull(c.deadline, "The deadline") : (prevRow ? isoOf(prevRow.deadline) : null),
   };
   if (id) {
-    const prev = await courseById(id);
+    const prev = prevRow;
     if (prev.source !== source && prev.row_count > 0) throw new Error("The source can't be changed after data was published for this course.");
     const display = cleanDisplay(c.display, prev.display);
     const rows = await sql`update courses set name = ${fields.name}, source = ${fields.source}, active = ${fields.active},

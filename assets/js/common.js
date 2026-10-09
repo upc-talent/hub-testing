@@ -295,14 +295,19 @@ let daysFilterState = { city:new Set(), type:new Set(), date:new Set(), trainer:
 let daysSearchQ = '';
 let msOptionsCache = {};
 
+// Other tables (Moodle Reports, the public reports page) register their own filter state + re-render here.
+const EXTRA_FILTER_SCOPES = {};
+function registerFilterScope(scope, getState, rerender){ EXTRA_FILTER_SCOPES[scope] = {getState, rerender}; }
 function filterStateFor(scope){
+  if(EXTRA_FILTER_SCOPES[scope]) return EXTRA_FILTER_SCOPES[scope].getState();
   if(scope==='sup') return supFilterState;
   if(scope==='trainer') return trainerFilterState;
   if(scope==='days') return daysFilterState;
   return masterFilterState;
 }
 function rerenderScope(scope){
-  if(scope==='sup') renderSupervisorTable();
+  if(EXTRA_FILTER_SCOPES[scope]) EXTRA_FILTER_SCOPES[scope].rerender();
+  else if(scope==='sup') renderSupervisorTable();
   else if(scope==='trainer') renderTrainerTable();
   else if(scope==='days') renderDaysTable();
   else renderMasterSheetPreview();
@@ -1054,7 +1059,7 @@ function buildStylesXml_(){
 <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
 <font><sz val="11"/><color rgb="FF1A2B45"/><name val="Calibri"/></font>
 </fonts>
-<fills count="8">
+<fills count="10">
 <fill><patternFill patternType="none"/></fill>
 <fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FF003261"/><bgColor indexed="64"/></patternFill></fill>
@@ -1063,13 +1068,15 @@ function buildStylesXml_(){
 <fill><patternFill patternType="solid"><fgColor rgb="FFC6E0B4"/><bgColor indexed="64"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFE699"/><bgColor indexed="64"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFF4CCCC"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFEDE7F6"/><bgColor indexed="64"/></patternFill></fill>
 </fills>
 <borders count="2">
 <border><left/><right/><top/><bottom/><diagonal/></border>
 <border><left style="thin"><color rgb="FFDCE4EF"/></left><right style="thin"><color rgb="FFDCE4EF"/></right><top style="thin"><color rgb="FFDCE4EF"/></top><bottom style="thin"><color rgb="FFDCE4EF"/></bottom><diagonal/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="7">
+<cellXfs count="9">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
@@ -1077,6 +1084,8 @@ function buildStylesXml_(){
 <xf numFmtId="0" fontId="2" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="2" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="2" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="2" fillId="8" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="2" fillId="9" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -1088,6 +1097,12 @@ function statusCellStyle_(value){
   if(v==='Sick Leave') return 5;
   if(v==='Resignation') return 6;
   if(v==='Absent') return 6;
+  // course completion (Reports): finished green · in progress yellow · not started red · not in roster grey · no data lavender
+  if(v==='Completed' || v==='Final video done, others missing') return 4;
+  if(v==='In progress') return 5;
+  if(v==='Not started') return 6;
+  if(v==='Not in roster') return 7;
+  if(v==='No completion data') return 8;
   return null;
 }
 function computeAutoColWidths_(headers, rows){
@@ -1100,9 +1115,10 @@ function computeAutoColWidths_(headers, rows){
     return Math.min(Math.max(max+3, 9), 45);
   });
 }
-function buildSheetXml_(headers, rows, colWidths, opts){
+function buildSheetXml_(headers, rows, colWidths, opts, sheetIndex){
   opts = opts || {};
-  const statusColIndex = opts.statusColIndex!==undefined ? opts.statusColIndex : -1;
+  // status colouring: one column (statusColIndex) or several (statusCols)
+  const statusCols = new Set(opts.statusCols || (opts.statusColIndex!==undefined ? [opts.statusColIndex] : []));
   const autoFilter = !!opts.autoFilter;
   const numCols = headers.length;
   const numRows = rows.length + 1;
@@ -1110,7 +1126,7 @@ function buildSheetXml_(headers, rows, colWidths, opts){
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <dimension ref="A1:${lastCol}${numRows}"/>
-<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetViews><sheetView ${sheetIndex ? '' : 'tabSelected="1" '}workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="20"/>
 <cols>${colWidths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols>
 <sheetData>`;
@@ -1121,10 +1137,12 @@ function buildSheetXml_(headers, rows, colWidths, opts){
     const r = ri + 2;
     xml += `<row r="${r}" ht="20" customHeight="1">` + row.map((val,ci)=>{
       let styleIdx = zebraStyle;
-      if(ci===statusColIndex){
+      if(statusCols.has(ci)){
         const override = statusCellStyle_(val);
         if(override!==null) styleIdx = override;
       }
+      // real numbers are written as numbers (sortable / summable in Excel); everything else as text
+      if(typeof val==='number' && isFinite(val)) return `<c r="${xlsxColLetter_(ci)}${r}" s="${styleIdx}"><v>${val}</v></c>`;
       return `<c r="${xlsxColLetter_(ci)}${r}" s="${styleIdx}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc_(val)}</t></is></c>`;
     }).join('') + `</row>`;
   });
@@ -1133,27 +1151,45 @@ function buildSheetXml_(headers, rows, colWidths, opts){
   xml += `</worksheet>`;
   return xml;
 }
+/* opts.autoName: use `filename` as given (no "save as" prompt).
+   opts.sheets: several sheets — [{name, headers, rows, colWidths, opts}] — instead of the single sheet in the arguments. */
 async function downloadStyledXlsx(filename, sheetName, headers, rows, colWidths, opts){
+  opts = opts || {};
   if(typeof JSZip === 'undefined'){
     toast('Excel export library failed to load — check your connection and try again','err');
     return false;
   }
-  const baseName = filename.replace(/\.xlsx$/i, '');
-  const chosenName = await promptForFilename(baseName, 'xlsx');
-  if(!chosenName) return false;
-  filename = chosenName;
+  if(!opts.autoName){
+    const baseName = filename.replace(/\.xlsx$/i, '');
+    const chosenName = await promptForFilename(baseName, 'xlsx');
+    if(!chosenName) return false;
+    filename = chosenName;
+  }
+  const sheets = (opts.sheets && opts.sheets.length) ? opts.sheets
+    : [{name: sheetName, headers, rows, colWidths, opts}];
+  // Excel sheet names: max 31 characters, none of : \ / ? * [ ], and unique
+  const used = new Set();
+  const sheetNames = sheets.map((s,i)=>{
+    let n = String(s.name||('Sheet'+(i+1))).replace(/[:\\\/?*\[\]]/g,' ').trim().slice(0,31) || ('Sheet'+(i+1));
+    while(used.has(n.toLowerCase())) n = n.slice(0,28)+' '+(i+1);
+    used.add(n.toLowerCase());
+    return n;
+  });
   try{
     const zip = new JSZip();
     zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`);
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`);
     zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
     zip.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xmlEsc_(sheetName).slice(0,31)}" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetNames.map((n,i)=>`<sheet name="${xmlEsc_(n)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`);
     zip.file('xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
     zip.file('xl/styles.xml', buildStylesXml_());
-    zip.file('xl/worksheets/sheet1.xml', buildSheetXml_(headers, rows, colWidths, opts));
+    sheets.forEach((s,i)=>{
+      const sw = s.colWidths || computeAutoColWidths_(s.headers, s.rows);
+      zip.file(`xl/worksheets/sheet${i+1}.xml`, buildSheetXml_(s.headers, s.rows, sw, s.opts||{}, i));
+    });
     const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1169,6 +1205,21 @@ async function downloadStyledXlsx(filename, sheetName, headers, rows, colWidths,
     toast('Excel export failed: ' + (e && e.message ? e.message : 'unknown error'), 'err');
     return false;
   }
+}
+
+// Course-completion exports: "10 Oct 26 - 1 PM - <Course Name> - Moodle.xlsx" — local time, Windows-safe.
+function reportFileName(courseName, source, ext, d){
+  d = d || new Date(); ext = ext || 'xlsx';
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let h = d.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  const stamp = `${d.getDate()} ${M[d.getMonth()]} ${String(d.getFullYear()).slice(-2)} - ${h} ${ap}`;
+  const src = String(source).toLowerCase() === 'sap' ? 'SAP' : 'Moodle';
+  const clean = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001F]/g, ' ')
+                                    .replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
+  let base = `${stamp} - ${clean(courseName) || 'Course'} - ${src}`;
+  if (base.length > 150) base = base.slice(0, 150).replace(/[. ]+$/, '');
+  if (/^(CON|PRN|AUX|NUL|COM\d|LPT\d)$/i.test(base)) base = '_' + base;
+  return `${base}.${ext}`;
 }
 
 /* ═══════════════════════════════ MODAL ═══════════════════════════════ */
