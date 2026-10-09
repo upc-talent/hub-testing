@@ -26,7 +26,7 @@ const RP_MONTH_NUM = (()=>{ const o = {}; ['january','february','march','april',
   .forEach((m,i)=>{ o[m] = i+1; o[m.slice(0,3)] = i+1; }); o.sept = 9; return o; })();
 const RP_DISPLAY_COLUMNS = [
   ['num','#'], ['district','District'], ['areaManager','Area Manager'], ['city','City'], ['supervisor','Supervisor'],
-  ['email','Email (masked)'], ['name','Name'], ['rate','Completion rate'], ['state','State'], ['completionDate','Completion date'], ['daysLeft','Days Left']
+  ['email','Email'], ['name','Name'], ['rate','Completion rate'], ['state','State'], ['completionDate','Completion date'], ['daysLeft','Days Left']
 ];
 
 const rpState = {
@@ -850,6 +850,7 @@ async function rpConfirmPublish(){
     rpState._pending = null;
     toast(`Published ${out.stored} row(s) to ${rpCourseTitle(rpCurrentCourse())}`,'ok');
     await rpLoadCourses(true);
+    await rpRefreshHubColumns();
   }catch(e){
     if(btn){ btn.disabled = false; btn.textContent = 'Publish'; }
     toast('Publish failed — '+(e.message||'please try again'),'err');
@@ -1113,9 +1114,18 @@ function rpRenderSlots(){
 async function rpSaveSlots(){
   try{
     await API.call('courseSlotsSet', {coreCourseId:document.getElementById('rpSlotCore').value||null, capsuleCourseId:document.getElementById('rpSlotCapsule').value||null});
-    toast('Core / Capsule courses saved — the Attendance tab shows them after a reload','ok');
+    toast('Core / Capsule courses saved','ok');
     await rpLoadCourses(true);
+    await rpRefreshHubColumns();
   }catch(e){ toast('Could not save — '+(e.message||''),'err'); }
+}
+
+// After a publish or a new Core / Capsule choice, the Attendance tab's columns follow without a page reload.
+async function rpRefreshHubColumns(){
+  if(typeof getShared!=='function') return;
+  courseSlots = await getShared(K_COURSE_SLOTS, courseSlots);
+  if(typeof renderTrainerTable==='function') renderTrainerTable();
+  if(typeof renderCompletionSourceCard==='function') renderCompletionSourceCard();
 }
 
 /* ═══════════════════════════════ SELF-TEST (open the page with ?debug=1, or run rpSelfTest() in the console) ═══════════════════════════════ */

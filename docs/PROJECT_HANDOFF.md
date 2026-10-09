@@ -36,7 +36,7 @@ assets/
   css/app.css         All styles
   img/logo.png        Default header logo (a logo uploaded in Trainer>Setup overrides it)
   vendor/             xlsx.full.min.js, jszip.min.js, html2canvas.min.js, jspdf.umd.min.js
-  js/config.js        ONLY place for URLs: Supabase URL + anon key, COMPLETION_REPORTS_URL, LINKS
+  js/config.js        ONLY place for URLs: Supabase URL + anon key, LINKS
   js/api.js           Backend client + storage adapter (getShared/setShared) — see §4
   js/common.js        Shared helpers (formatting, colours, filters, sort, modals, exports, capacity,
                       loadCoreData, bulk-selection framework, optimistic saveShared)
@@ -314,7 +314,7 @@ Open `http://localhost:5173/`. It talks to the **live Supabase backend** — the
 
 ## v5 — Reports (in progress — see docs/Hub_Reports_Integration_Plan.md)
 
-- **Done: Phase 1 (database), Phase 2 (Edge Function), Phase 3 (staff tabs).** Tables `courses`, `course_progress` (one row per learner per
+- **Done: Phases 1–5** (database, Edge Function, staff tabs, Hub columns, public page). Phase 6 is manual (below). Tables `courses`, `course_progress` (one row per learner per
   course; a publish replaces the course's rows), `course_uploads` (publish audit; never the exclusion list),
   `lms_learners` (onboarding people for completion reporting only — never part of the roster). Settings keys
   `coreCourseId` / `capsuleCourseId`.
@@ -340,3 +340,32 @@ Open `http://localhost:5173/`. It talks to the **live Supabase backend** — the
 - `common.js`: `downloadStyledXlsx` takes `opts.autoName` and `opts.sheets` (multi-sheet), writes real numbers as numbers,
   colours course states / roster match (`statusCols`); `reportFileName()`; `registerFilterScope()` lets new tables use
   the cascading multi-select filters. SheetJS upgraded to 0.20.3 (re-test Master upload, Calendar import, Bulk Add).
+- **Phase 4 (Hub columns)** — `loadCoreData` also reads `course-slots` into the global `courseSlots`. Attendance tab
+  Core / Capsule use `courseSlotCellHtml` (✔ date, red when finished after the booked training day; ✔ Completed (no
+  date); bar + %; —), sort `core` / `capsule` = finished by date → finished without date → in progress by % → none,
+  coordinator export text via `courseSlotText` ("Completed 5 Oct 26" / "Completed (no date)" / "45%" / blank). The
+  supervisor page has Core % / Capsule % columns (percentage only) and exports them. The Import Completion card, its
+  Excel import and the Apps Script Sync Now code are gone (General Configurations shows a read-only "Course Completion"
+  line); Edit Selected no longer edits Completion %. `pharmacists.completion_pct` / `capsule_pct` remain in the table as
+  old data only — nothing reads, writes or exports them.
+- **Phase 5 (public page)** — `reports.html` + `assets/js/reports.js` (globals `pub*`), `API.init('public')` (no token,
+  no supervisor). Overview (totals only) → course table with the columns switched on in Reports Configuration; cascading
+  filters (scope `pub`), name search (200 ms debounce), chronological date sort, Days Left (KSA calendar days: Done /
+  Today! / ≤3 critical / ≤7 warning / Overdue), Excel (JSZip writer, rate as a number) / Image / PDF named with
+  `reportFileName`, share link `reports.html?c=<slug>` (locked view), offline fallback from
+  `localStorage['upc:reports-cache']` (last 8 courses), print styles, `noindex`. UI round (owner request): layout follows the
+  old dashboard (Live status bar + Refresh, View picker with count badge, one toolbar, status legend, course cards with
+  Done / In progress / Not started / Total, completion bar, "N modules" = `agg.modules`). **Emails are shown in full**
+  on the public page and its Excel (owner decision — the plan had them masked); switch the Email column off per course
+  in Reports Configuration to send no emails for that course. A "Report
+  unavailable" answer (inactive course / renewed link) is never replaced by the saved copy. `config.js` no longer has
+  any Apps Script link; the landing card opens `reports.html`.
+- **Phase 6 (manual, owner) — migration and retirement of the old dashboard:**
+  1. For each course tab of the old Google Sheet: File → Download → .xlsx.
+  2. Reports Configuration → track a course with the same name (Moodle) → Moodle Reports → choose it → upload that
+     file → check the preview (final video, counted statuses, unreadable timestamps) → Publish.
+  3. Compare per course with the old dashboard (totals, finished, in progress) — differences usually come from the
+     final-video or counted-status choice, or people missing from the roster (see "Not in roster").
+  4. Switch the courses to **Active**; pick Core / Capsule in Reports Configuration → Hub columns.
+  5. In the old `LMS-reporting` repo, replace its page with a one-line "Moved → <Hub>/reports.html".
+  6. Archive the Apps Script deployment and set the old Sheet to **Restricted** (its URL was public and exposed the roster).

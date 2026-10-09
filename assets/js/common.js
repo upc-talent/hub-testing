@@ -184,15 +184,21 @@ let pendingList = [];
 let trainingConfig = {dates:[], maxCapacity:30, trainerNames:[], coordinatorNames:[]};
 let ops = {assignments:{}, attendance:{}, shifts:{}, history:{}};
 let leaveRequestsCache = [];
+// Core / Capsule completion (v5): the two courses chosen in Reports Configuration → Hub columns, read-only.
+// {core: {courseId, name, lastPublishedAt, byEmail:{email:{s,r,f,d}}} | null, capsule: … }. Supervisors get only r (%).
+const K_COURSE_SLOTS = 'course-slots';
+let courseSlots = {core:null, capsule:null};
 async function loadCoreData(){
-  // one request for all four (a single round-trip instead of four)
-  const r = await getSharedMany([K_MASTER, K_PENDING, K_CONFIG, K_OPS], {
+  // one request for all of them (a single round-trip)
+  const r = await getSharedMany([K_MASTER, K_PENDING, K_CONFIG, K_OPS, K_COURSE_SLOTS], {
     [K_MASTER]: [],
     [K_PENDING]: [],
     [K_CONFIG]: {dates:[], maxCapacity:30, trainerNames:[], coordinatorNames:[], trainingNames:[]},
-    [K_OPS]: {assignments:{}, attendance:{}, shifts:{}, history:{}}
+    [K_OPS]: {assignments:{}, attendance:{}, shifts:{}, history:{}},
+    [K_COURSE_SLOTS]: {core:null, capsule:null}
   });
   masterData = r[K_MASTER]; pendingList = r[K_PENDING]; trainingConfig = r[K_CONFIG]; ops = r[K_OPS];
+  courseSlots = r[K_COURSE_SLOTS] || {core:null, capsule:null};
   if(!trainingConfig.dates) trainingConfig.dates = [];
   if(!trainingConfig.trainerNames) trainingConfig.trainerNames = [];
   if(!trainingConfig.coordinatorNames) trainingConfig.coordinatorNames = [];
@@ -619,10 +625,7 @@ function getSortValue(p, key){
     const s = attSummary(p.id, p);
     return s.status ? s.status + '_' + (s.punctuality||'') : '';
   }
-  if(key==='completionPct' || key==='capsulePct'){
-    const n = parseFloat(p[key]);
-    return isNaN(n) ? -1 : n;
-  }
+  if(key==='core' || key==='capsule') return courseSlotSortValue(p, key);
   return (p[key]||'').toString().toLowerCase();
 }
 function applySort(scope, list){
@@ -900,18 +903,72 @@ function cityCellHtml(p){
   }
   return p.city ? `<span class="city-badge">${esc(p.city)}</span>` : '—';
 }
-// `key`: 'completionPct' (Core Completion) or 'capsulePct' (Capsule Completion)
-function completionCellHtml(p, key){
-  key = key || 'completionPct';
-  if(p[key]===undefined || p[key]===null || p[key]===''){ return '<span class="small-note">—</span>'; }
-  const n = parseFloat(p[key]);
-  if(isNaN(n)) return esc(p[key]);
+/* ── Core / Capsule completion cells (v5) — read from the published course data (courseSlots), matched by email ──
+   Finished (Completed, or final video done) → "✔ 5 Oct 26", red when it was after the pharmacist's training day;
+   "✔ Completed (no date)" when the time is unknown · in progress → bar + % · no data → "—". */
+function courseSlotEntry(p, slot){
+  const s = courseSlots && courseSlots[slot];
+  if(!s || !s.byEmail) return null;
+  return s.byEmail[String(p.email||'').trim().toLowerCase()] || null;
+}
+// KSA calendar date (YYYY-MM-DD) of an ISO time, and its "5 Oct 26" form
+function ksaDateIso(iso){ const d = new Date(Date.parse(iso) + 3*3600*1000); return isNaN(d) ? '' : d.toISOString().slice(0,10); }
+function ksaDateText(iso){
+  const d = new Date(Date.parse(iso) + 3*3600*1000);
+  return isNaN(d) ? '' : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0,3)} ${String(d.getUTCFullYear()).slice(-2)}`;
+}
+// Finished after the training day they were booked on (day 1 of a 2-day training). Unassigned / on leave → never.
+function finishedAfterTrainingDay(p, e){
+  if(!e || !e.f) return false;
+  const a = ops.assignments[p.id];
+  if(!a || a.type!=='date') return false;
+  const day = dayById(a.dateId);
+  return !!(day && day.date && ksaDateIso(e.f) > day.date);
+}
+function completionBarHtml(r){
+  const n = Math.round(Number(r)*10)/10;
+  if(!isFinite(n)) return '<span class="small-note">—</span>';
   const clamped = Math.max(0, Math.min(100, n));
   const color = n>=100 ? 'var(--navy)' : 'var(--blue)';
   return `<div class="compl-cell">
       <div class="compl-bar-track"><div class="compl-bar-fill" style="width:${clamped}%;background:${color};"></div></div>
       <span class="compl-pct-text" style="color:${color};">${n}%</span>
     </div>`;
+}
+function courseSlotCellHtml(p, slot){
+  const e = courseSlotEntry(p, slot);
+  if(!e) return '<span class="small-note">—</span>';
+  if(e.d){
+    if(!e.f) return '<span class="slot-done">✔ Completed (no date)</span>';
+    const late = finishedAfterTrainingDay(p, e);
+    return `<span class="slot-done${late?' late':''}"${late?' title="Finished after the training day"':''}>✔ ${esc(ksaDateText(e.f))}</span>`;
+  }
+  return completionBarHtml(e.r);
+}
+// Supervisor page: the percentage only (that is all the server sends a supervisor)
+function courseSlotPctHtml(p, slot){
+  const e = courseSlotEntry(p, slot);
+  return e ? completionBarHtml(e.r) : '<span class="small-note">—</span>';
+}
+// Export text: "Completed 5 Oct 26" / "Completed (no date)" / "45%" / blank
+function courseSlotText(p, slot){
+  const e = courseSlotEntry(p, slot);
+  if(!e) return '';
+  if(e.d) return e.f ? 'Completed '+ksaDateText(e.f) : 'Completed (no date)';
+  return (Math.round(Number(e.r)*10)/10)+'%';
+}
+// Sort (ascending): finished with a date (earliest first) → finished without a date → in progress (highest % first) → no data
+function courseSlotSortValue(p, slot){
+  const e = courseSlotEntry(p, slot);
+  if(!e) return 3e15;
+  if(e.d) return e.f ? Date.parse(e.f) : 1e15;
+  return 2e15 + (100 - (Number(e.r)||0)) * 1e10;
+}
+function courseSlotHeaderTitle(slot){
+  const s = courseSlots && courseSlots[slot];
+  const label = slot==='core' ? 'Core' : 'Capsule';
+  if(!s) return `${label}: no course chosen yet (Reports Configuration → Hub columns)`;
+  return `${label} = ${s.name}` + (s.lastPublishedAt ? ` · published ${ksaDateText(s.lastPublishedAt)}` : ' · not published yet');
 }
 function attendanceStatusText(p){
   const s = attSummary(p.id, p);
@@ -1026,8 +1083,9 @@ function buildMasterRow(p){
     dateText, conductedBy,
     pharmacyNo:p.pharmacyNo||'', employeeId:p.employeeId||'', email:p.email||'', displayName:p.displayName||'',
     phone:p.phone||'', scfhs:p.scfhs||'',
-    completionPct: p.completionPct!==undefined && p.completionPct!=='' ? p.completionPct+'%' : '',
-    capsulePct: p.capsulePct!==undefined && p.capsulePct!==null && p.capsulePct!=='' ? p.capsulePct+'%' : '',
+    // Core / Capsule completion as export text (v5, from the published course data)
+    completionPct: courseSlotText(p, 'core'),
+    capsulePct: courseSlotText(p, 'capsule'),
     statusText,
     workShift: (ops.shifts && ops.shifts[p.id]) || '',
     // Retraining: the training day originally missed, and which attempt the current booking is (blank = first attempt)
@@ -1286,11 +1344,12 @@ async function captureFull(el){
   try{ return await html2canvas(el, {scale:2, backgroundColor:'#ffffff', useCORS:true, allowTaint:true, logging:false}); }
   finally{ el.classList.remove('exporting'); }
 }
-async function exportTableImage(containerId, filename){
+// opts.autoName: `filename` is the final name (with .png / .pdf) — no "save as" prompt (course reports, reportFileName)
+async function exportTableImage(containerId, filename, opts){
   const el = document.getElementById(containerId);
   if(!el){ toast('Nothing to export','err'); return; }
   if(typeof html2canvas === 'undefined'){ toast('Image export library failed to load — check your connection and try again','err'); return; }
-  const chosenName = await promptForFilename(filename, 'png');
+  const chosenName = (opts && opts.autoName) ? filename : await promptForFilename(filename, 'png');
   if(!chosenName) return;
   try{
     const canvas = await captureFull(el);
@@ -1308,11 +1367,11 @@ async function exportTableImage(containerId, filename){
     }, 'image/png');
   }catch(e){ console.error('Image export error:', e); toast('Image export failed: ' + (e && e.message ? e.message : 'unknown error'), 'err'); }
 }
-async function exportTablePDF(containerId, filename){
+async function exportTablePDF(containerId, filename, opts){
   const el = document.getElementById(containerId);
   if(!el){ toast('Nothing to export','err'); return; }
   if(typeof html2canvas === 'undefined' || !window.jspdf){ toast('PDF export library failed to load — check your connection and try again','err'); return; }
-  const chosenName = await promptForFilename(filename, 'pdf');
+  const chosenName = (opts && opts.autoName) ? filename : await promptForFilename(filename, 'pdf');
   if(!chosenName) return;
   try{
     const canvas = await captureFull(el);

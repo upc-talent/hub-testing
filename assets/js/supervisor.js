@@ -264,13 +264,14 @@ function renderSupervisorTable(){
   const days = visibleDaysFor(currentSupervisor);
   const tb = document.getElementById('supTableBody');
   if(!own.length && !pending.length){
-    tb.innerHTML = `<tr><td colspan="8" class="empty-msg">No pharmacists match the current filters</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="10" class="empty-msg">No pharmacists match the current filters</td></tr>`;
     updateSortIndicators('sup');
     bulkSyncAfterRender('sup', []);
     return;
   }
   let i = 0;
-  // Column order: Pharmacist Name (with its row number), Pharmacy No., Email, Date, Attendance Status, Work Shift, Notes
+  // Column order: Pharmacist Name (with its row number), Pharmacy No., Email, Date, Attendance Status, Work Shift, Core %, Capsule %, Notes
+  ['core','capsule'].forEach(slot=>{ const th = document.getElementById('th-sup-'+slot); if(th) th.title = courseSlotHeaderTitle(slot); });
   const nameCell = (n, p) => `<td class="name-cell"><span class="rownum">${n}</span>${esc(p.displayName)}</td>`;
   let rows = own.map(p=>{
     i++;
@@ -290,6 +291,8 @@ function renderSupervisorTable(){
       <td class="no-truncate">${dateHtml}</td>
       <td class="no-truncate">${attendanceBadgeHtml(p)}</td>
       <td class="${supMissingFilter && isMissingSubmitData(p) ? 'cell-missing' : ''}">${workShiftSelectHtml(p)}</td>
+      <td>${courseSlotPctHtml(p, 'core')}</td>
+      <td>${courseSlotPctHtml(p, 'capsule')}</td>
       <td class="no-truncate">${p.note ? `<span class="sup-note">${esc(p.note)}</span>` : '<span class="small-note">—</span>'}</td>
     </tr>`;
   }).join('');
@@ -304,6 +307,8 @@ function renderSupervisorTable(){
         <button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="openEditPendingModal('${p.id}')">Edit</button>
         <button class="btn btn-danger btn-sm" style="margin-top:4px;" onclick="deletePendingPharmacist('${p.id}')">Delete</button>
       </td>
+      <td></td>
+      <td></td>
       <td></td>
       <td></td>
       <td></td>
@@ -948,7 +953,7 @@ async function confirmAnnualLeaveUpload(){
 async function exportSupervisorExcel(){
   const list = applySupFilters(currentSupervisorScope());
   if(!list.length){ toast('No data to export','err'); return; }
-  const headers = ['Pharmacist Name','Pharmacy No.','Email','Supervisor','District','Area Manager','City','Date','Attendance','Late Arrival Time','Work Shift','Notes'];
+  const headers = ['Pharmacist Name','Pharmacy No.','Email','Supervisor','District','Area Manager','City','Date','Attendance','Late Arrival Time','Work Shift','Core %','Capsule %','Notes'];
   const rows = [];
   list.forEach(p=>{
     const r = buildMasterRow(p);
@@ -963,9 +968,10 @@ async function exportSupervisorExcel(){
       const att = ops.attendance[p.id];
       lateTime = (att&&att.status==='Attended'&&att.punctuality==='Late')?(att.time||''):'';
     }
-    rows.push([r.displayName,r.pharmacyNo,r.email,r.supervisor,r.district,r.areaManager,r.city,r.dateText,r.statusText,lateTime,r.workShift,r.note]);
+    rows.push([r.displayName,r.pharmacyNo,r.email,r.supervisor,r.district,r.areaManager,r.city,r.dateText,r.statusText,lateTime,r.workShift,
+      courseSlotText(p,'core'),courseSlotText(p,'capsule'),r.note]);
   });
-  const colWidths = [28,14,28,20,14,18,12,24,16,14,14,26];
+  const colWidths = [28,14,28,20,14,18,12,24,16,14,14,10,10,26];
   const ok = await downloadStyledXlsx('my-pharmacists.xlsx', 'My Pharmacists', headers, rows, colWidths);
   if(ok) toast('Excel downloaded','ok');
 }

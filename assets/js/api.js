@@ -216,6 +216,7 @@
       return cfg;
     }
     if (key === 'company-logo') return c.settings.logo === undefined ? null : c.settings.logo;
+    if (key === 'course-slots') return { core: c.settings.core || null, capsule: c.settings.capsule || null };   // read-only (v5)
     return null;
   }
 

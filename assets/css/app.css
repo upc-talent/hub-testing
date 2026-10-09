@@ -478,3 +478,87 @@ tr.rp-excl td{opacity:.5;}
 .rp-cols label{display:flex;gap:6px;align-items:center;}
 .rp-check{flex-direction:row !important;align-items:center;gap:8px !important;}
 .rp-switch{display:inline-flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;}
+
+/* v5 — Core / Capsule completion cells (Attendance tab) */
+.slot-done{font-size:12px;font-weight:700;color:var(--ok);white-space:nowrap;}
+.slot-done.late{color:var(--danger);cursor:help;}
+
+/* v5 — public course progress page (reports.html) — white bars under the header, course cards, one toolbar */
+body.pub{background:#f3f6fa;}
+.pub-bar{background:#fff;border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.pub-status{gap:14px;}
+.pub-live{display:inline-flex;align-items:center;gap:8px;color:var(--navy);font-size:14px;}
+.pub-live .dot{width:10px;height:10px;border-radius:50%;background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.18);display:inline-block;}
+.pub-live.offline{color:#a15c07;} .pub-live.offline .dot{background:#e0a020;box-shadow:0 0 0 4px rgba(224,160,32,.2);}
+.pub-status-meta{font-size:12.5px;color:var(--muted);flex:1 1 300px;}
+.pub-refresh{margin-left:auto;}
+.pub-view-label{font-size:12px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase;}
+.pub-view-select{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;padding:6px 12px;background:#f8fafd;min-width:280px;max-width:100%;}
+.pub-view-select select{border:none;background:transparent;font:inherit;font-weight:700;color:var(--navy);font-size:14px;flex:1;min-width:0;max-width:440px;outline:none;cursor:pointer;}
+.pub-view-select .ic{font-size:16px;}
+.pub-count{background:var(--navy);color:#fff;font-size:11.5px;font-weight:800;border-radius:999px;padding:2px 9px;}
+.pub-locked{color:var(--navy);font-weight:700;font-size:13px;background:#eef8fc;}
+.pub-toolbar{justify-content:space-between;align-items:flex-start;}
+.pub-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1 1 600px;}
+.pub-filters .filter-field{margin:0;}
+.pub-clear{border:none;background:none;color:var(--danger);font-weight:700;font-size:13px;cursor:pointer;padding:6px 8px;}
+.pub-clear:hover{text-decoration:underline;}
+.pub-actions{display:flex;flex-wrap:wrap;gap:8px;}
+.pub-btn-pdf{background:#2FB3DF;border-color:#2FB3DF;color:#fff;}
+.pub-legend-bar{font-size:13px;color:var(--muted);gap:18px;padding:10px 24px;}
+.pub-legend-title{font-weight:700;color:var(--text);}
+.pub-legend-bar .lg{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;}
+.lg.fin{background:var(--navy);} .lg.prog{background:#2FB3DF;} .lg.not{background:#fff;border:1.5px solid #c9d1db;} .lg.nod{background:#e3e8ef;}
+.pub-main{max-width:1600px;padding:22px 24px 60px;}
+.pub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:22px;}
+.pub-card{display:flex;flex-direction:column;gap:14px;padding:24px 26px;border-radius:14px;margin:0;box-shadow:0 1px 3px rgba(0,50,97,.06);}
+.pub-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+.pub-card h3{margin:2px 0 0;font-size:16.5px;line-height:1.35;color:var(--navy);font-weight:800;}
+.pub-summary h2{margin:2px 0 4px;font-size:19px;color:var(--navy);}
+.pub-cat{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
+.pub-modules{background:var(--navy);color:#fff;font-size:11.5px;font-weight:800;border-radius:999px;padding:3px 10px;white-space:nowrap;}
+.pub-stats4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.pub-st{background:#f3f6fa;border-radius:10px;padding:12px 6px;text-align:center;}
+.pub-st b{display:block;font-size:21px;font-weight:800;line-height:1.2;}
+.pub-st span{display:block;font-size:10.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-top:2px;}
+.pub-st.done b{color:#10b981;} .pub-st.prog b{color:#2FB3DF;} .pub-st.not b{color:#6b7c93;} .pub-st.total b{color:var(--navy);}
+.pub-progress-track{height:8px;border-radius:999px;background:#e3e8ef;overflow:hidden;}
+.pub-progress-track i{display:block;height:100%;background:#10b981;border-radius:999px;}
+.pub-progress-lbl{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:6px;}
+.pub-card-note{margin-top:-6px;}
+.pub-details{width:100%;justify-content:center;color:#2FB3DF;border-color:var(--border);font-weight:700;}
+.pub-details:hover{border-color:#2FB3DF;}
+.pub-updated{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;min-height:16px;}
+.pub-updated .dot{width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;}
+.pub-nodata{background:#f3f6fa;border-radius:10px;padding:26px 10px;text-align:center;color:var(--muted);font-weight:600;}
+.pub-summary{display:flex;flex-direction:column;gap:14px;padding:22px 26px;border-radius:14px;margin-bottom:18px;}
+.pub-summary .pub-stats4{max-width:720px;}
+.pub-summary .pub-progress{max-width:720px;}
+.pub-table-card{border-radius:14px;}
+.pub-table-card .name-cell{font-weight:700;color:var(--navy);}
+.pub-rate{min-width:180px;}
+.pub-num{color:var(--muted);}
+.pub-days{font-size:12px;font-weight:700;white-space:nowrap;}
+.pub-days.done{color:var(--ok);} .pub-days.ok{color:var(--navy);} .pub-days.warning{color:#a15c07;}
+.pub-days.critical,.pub-days.overdue{color:var(--danger);}
+tr.row-overdue td{background:var(--danger-bg);}
+tr.row-critical td{background:#fff4e5;}
+.pub-print-title{display:none;}
+.pub .table-wrap{overflow-x:auto;}
+@media (max-width:640px){
+  .pub-bar{padding:10px 16px;}
+  .pub-main{padding:16px 16px 48px;}
+  .pub .topbar{padding:10px 16px;}
+  .pub-grid{grid-template-columns:1fr;}
+  .pub-card,.pub-summary{padding:18px 16px;}
+  .pub-view-select{min-width:0;flex:1 1 100%;}
+  .pub-refresh{margin-left:0;}
+  .pub-st b{font-size:18px;}
+}
+@media print{
+  .no-print,.hscroll-proxy,#toast,#modalRoot{display:none !important;}
+  body.pub{background:#fff;}
+  .pub *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .pub-print-title{display:block;margin-bottom:6px;}
+  .pub .table-wrap{overflow:visible;}
+}

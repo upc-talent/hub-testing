@@ -79,7 +79,7 @@ async function route(req: any, ip = "unknown") {
   if (action === "get" && req.key === "company-logo") {
     return { ok: true, data: { records: [], settings: { logo: (await settingsMap()).logo ?? null } } };
   }
-  // Public reports page (reports.html, no login): read-only, rate-limited, masked — see the REPORTS section.
+  // Public reports page (reports.html, no login): read-only, rate-limited — see the REPORTS section.
   if (action === "reportsPublic") { await publicRateLimit(ip); return await reportsPublic(); }
   if (action === "reportsPublicCourse") { await publicRateLimit(ip); return await reportsPublicCourse(req.slug); }
   const ctx = await authenticate(req);
@@ -1177,7 +1177,7 @@ async function patchTableGuarded(ctx: Ctx, key: string, records: Record<string, 
    Course completion lives in courses / course_progress / course_uploads / lms_learners (schema.sql, "v5 — Reports").
    - Staff: Moodle Reports parses the LMS sheets IN THE BROWSER and publishes computed rows (coursePublish); a publish
      replaces the course's rows. Reports Configuration manages courses, the public display and the Core/Capsule slots.
-   - Public (reports.html, no login): reportsPublic (aggregates only) and reportsPublicCourse (masked rows of one active
+   - Public (reports.html, no login): reportsPublic (aggregates only) and reportsPublicCourse (the rows of one active
      course, by its unguessable share slug) — read-only, rate-limited per IP, cached 60 s.
    - Schedule results (On time / Late / Overdue …) depend on "now", so they are computed when read, never stored.
      A finished learner whose final-video time couldn't be read (final_at null) is always "Completed (date unknown)" —
@@ -1472,7 +1472,8 @@ async function mergedCourseRows(courseId: string, includeNoData: boolean, ref?: 
   return out;
 }
 function aggregateOf(rows: MergedRow[]) {
-  const a = { total: rows.length, completed: 0, finalOnly: 0, inProgress: 0, notStarted: 0, noData: 0, notInRoster: 0, onboarding: 0, avgRate: 0 };
+  // modules = videos counted in the rate (the "N modules" badge on the public page)
+  const a = { total: rows.length, completed: 0, finalOnly: 0, inProgress: 0, notStarted: 0, noData: 0, notInRoster: 0, onboarding: 0, avgRate: 0, modules: 0 };
   let sum = 0, n = 0;
   for (const r of rows) {
     if (r.flag === "not_in_roster") a.notInRoster++;
@@ -1480,6 +1481,7 @@ function aggregateOf(rows: MergedRow[]) {
     if (!r.p) { a.noData++; continue; }
     const rate = Number(r.p.rate);
     sum += rate; n++;
+    if (Number(r.p.total) > a.modules) a.modules = Number(r.p.total);
     if (r.p.state === "Completed") a.completed++;
     else if (r.p.state === "Final video done, others missing") a.finalOnly++;
     else if (rate > 0) a.inProgress++;
@@ -1593,7 +1595,7 @@ async function getCourseSlots(ctx: Ctx) {
   return { records: [], settings: { core: await slot(st.coreCourseId), capsule: await slot(st.capsuleCourseId) } };
 }
 
-/* ---------- public (reports.html): read-only, masked, rate-limited, cached ---------- */
+/* ---------- public (reports.html): read-only, rate-limited, cached; only the enabled columns are sent ---------- */
 const PUBLIC_RATE_PER_MIN = 30;
 async function publicRateLimit(ip: string) {
   const minute = Math.floor(Date.now() / 60000);
@@ -1613,12 +1615,6 @@ async function publicRateLimit(ip: string) {
   }
   // expired counters are cleared now and then (kv_cache rows expire but aren't removed on their own)
   if (Math.random() < 0.02) { try { await sql`delete from kv_cache where key like 'rl:%' and expires_at < now()`; } catch (_) { /* ignore */ } }
-}
-function maskEmail(e: string) {
-  const at = e.lastIndexOf("@");
-  if (at < 1) return "•••";
-  const local = e.slice(0, at);
-  return (local.length > 2 ? local.slice(0, 2) : local.slice(0, 1)) + "•••" + e.slice(at);
 }
 function publicCourseHead(c: any, agg: any) {
   const d = { ...DEFAULT_DISPLAY, ...(c.display || {}) };
@@ -1664,7 +1660,8 @@ async function reportsPublicCourse(slug: unknown) {
       const p = m.p;
       const o: any = { s: p ? p.state : "No completion data", fd: !!(p && p.final_done), fl: m.flag };
       if (cols.has("name")) o.n = m.name;
-      if (cols.has("email")) o.e = maskEmail(m.email);
+      // full email (owner decision, v5 UI round): hide the Email column per course in Reports Configuration to send none
+      if (cols.has("email")) o.e = m.email;
       if (cols.has("district")) o.di = m.district;
       if (cols.has("areaManager")) o.am = m.areaManager;
       if (cols.has("city")) o.ci = m.city;

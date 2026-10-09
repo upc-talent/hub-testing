@@ -93,8 +93,8 @@
             <th onclick="toggleSort('trainer','date')">Date <span class="sort-ind" id="sort-trainer-date"></span></th>
             <th onclick="toggleSort('trainer','email')">Email <span class="sort-ind" id="sort-trainer-email"></span></th>
             <th onclick="toggleSort('trainer','displayName')">Pharmacist Name <span class="sort-ind" id="sort-trainer-displayName"></span></th>
-            <th class="col-export-skip" onclick="toggleSort('trainer','completionPct')">Core Completion <span class="sort-ind" id="sort-trainer-completionPct"></span></th>
-            <th class="col-export-skip" onclick="toggleSort('trainer','capsulePct')">Capsule Completion <span class="sort-ind" id="sort-trainer-capsulePct"></span></th>
+            <th class="col-export-skip" id="th-trainer-core" onclick="toggleSort('trainer','core')">Core Completion <span class="sort-ind" id="sort-trainer-core"></span></th>
+            <th class="col-export-skip" id="th-trainer-capsule" onclick="toggleSort('trainer','capsule')">Capsule Completion <span class="sort-ind" id="sort-trainer-capsule"></span></th>
             <th class="col-export-skip" onclick="toggleSort('trainer','attendance')">Attendance <span class="sort-ind" id="sort-trainer-attendance"></span></th>
             <th class="no-sort col-export-skip">Notes</th>
           </tr></thead>
@@ -131,30 +131,10 @@
         <div class="stat-mini" id="masterStats"></div>
       </div>
 
-      <div class="card" id="importCompletionCard">
-        <div class="section-head" style="margin-top:0"><h2>Import Completion</h2></div>
-        <p class="small-note">Upload the completion report exported from the main viewership tool — needs a column with the pharmacist's email and a column with their completion percentage. Matched by email and merged into the pharmacists already on the master sheet.</p>
-        <div class="row" style="margin-top:8px">
-          <label class="field-label" for="completionTarget" style="margin:0">Import into</label>
-          <select id="completionTarget"><option value="completionPct">Core Completion</option><option value="capsulePct">Capsule Completion</option></select>
-          <input type="file" id="completionFileInput" accept=".xlsx,.xls,.csv" onchange="handleCompletionUpload(this)">
-        </div>
-        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
-          <p class="small-note" style="margin:0 0 8px;">Or pull live from <b>Training Completion Reports</b> — pick the course each column is pulled from:</p>
-          <div class="row" style="flex-wrap:wrap;margin-bottom:8px;">
-            <b class="sync-label">Core Completion</b>
-            <select id="completionCourseSelect" style="min-width:260px"><option value="">Loading courses…</option></select>
-            <button class="btn btn-navy btn-sm" onclick="syncCompletionFromCourse('core')">⬇ Sync Now</button>
-            <span class="small-note" id="completionSyncStatus"></span>
-          </div>
-          <div class="row" style="flex-wrap:wrap;margin-bottom:8px;">
-            <b class="sync-label">Capsule Completion</b>
-            <select id="capsuleCourseSelect" style="min-width:260px"><option value="">Loading courses…</option></select>
-            <button class="btn btn-navy btn-sm" onclick="syncCompletionFromCourse('capsule')">⬇ Sync Now</button>
-            <span class="small-note" id="capsuleSyncStatus"></span>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="loadCompletionCourseList()">↻ Refresh Course List</button>
-        </div>
+      <!-- Course completion now comes from Reports Configuration → Hub columns (v5); this card only says which courses. -->
+      <div class="card" id="completionSourceCard">
+        <div class="section-head" style="margin-top:0"><h2>Course Completion</h2></div>
+        <p class="small-note" id="completionSourceText"></p>
       </div>
 
       <div class="card">

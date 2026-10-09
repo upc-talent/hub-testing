@@ -604,7 +604,7 @@ function applyRoleToPage(){
     (coord && !COORD_TABS.includes(t.dataset.tab)) || (t.dataset.tab==='t-activity' && !isSuperAdmin())
     || (t.classList.contains('reports-only') && !isReportsAdmin())));
   document.querySelectorAll('#t-analytics > *').forEach(el=>el.classList.toggle('admin-hidden', coord && el.id!=='masterSheetPreviewCard'));
-  document.querySelectorAll('#t-setup > *').forEach(el=>el.classList.toggle('admin-hidden', coord && el.id!=='importCompletionCard'));
+  document.querySelectorAll('#t-setup > *').forEach(el=>el.classList.toggle('admin-hidden', coord));   // the coordinator has no General Configurations tab (v5)
   const badge = document.getElementById('roleBadge');
   if(badge){
     badge.textContent = (ROLE_LABELS[API.role] || 'Trainer') + (API.user ? ' · '+API.user : '');
@@ -658,7 +658,23 @@ function renderSetupTab(){
   renderCoordinatorNamesList();
   renderTrainingNamesList();
   renderCityRoster();
-  loadCompletionCourseList();
+  renderCompletionSourceCard();
+}
+
+// General Configurations: where Core / Capsule completion comes from now (read-only — set in Reports Configuration).
+function renderCompletionSourceCard(){
+  const el = document.getElementById('completionSourceText');
+  if(!el) return;
+  const part = (label, s)=> `${label}: ${s ? '<b>'+esc(s.name)+'</b> ('+(s.lastPublishedAt ? 'published '+esc(ksaDateText(s.lastPublishedAt)) : 'not published yet')+')' : '<i>none chosen</i>'}`;
+  el.innerHTML = `Course completion now comes from <b>Reports Configuration → Hub columns</b> (superadmin and coordinators). `
+    + part('Core', courseSlots.core) + ' · ' + part('Capsule', courseSlots.capsule) + '.';
+}
+// Attendance tab: the Core / Capsule headers say which course they show
+function updateCourseSlotHeaders(){
+  ['core','capsule'].forEach(slot=>{
+    const th = document.getElementById('th-trainer-'+slot);
+    if(th) th.title = courseSlotHeaderTitle(slot);
+  });
 }
 
 function renderMasterPreview(){
@@ -925,165 +941,6 @@ async function importMasterRows(dataRows, mapping){
     <div class="modal-actions"><button class="btn btn-navy btn-sm" onclick="closeModal()">OK</button></div>`, 'max-width:620px;');
 }
 
-async function handleCompletionUpload(input){
-  const file = input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = async (e)=>{
-    try{
-      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false, blankrows:false});
-      if(!aoa.length){ toast('The file is empty','err'); input.value=''; return; }
-      const headerRow = aoa[0].map(h=>String(h||'').trim());
-      const emailIdx = headerRow.findIndex(h=>/email/i.test(h));
-      const pctIdx = headerRow.findIndex(h=>/completion|progress|%/i.test(h));
-      if(emailIdx===-1 || pctIdx===-1){
-        toast('Could not detect an Email column and a Completion % column in this file','err');
-        input.value=''; return;
-      }
-      const rows = aoa.slice(1).map(r=>({
-        email: String(r[emailIdx]??'').trim().toLowerCase(),
-        pct: String(r[pctIdx]??'').replace('%','').trim()
-      })).filter(r=>r.email);
-
-      // which column the file fills: Core Completion or Capsule Completion
-      const tSel = document.getElementById('completionTarget');
-      const field = tSel && tSel.value==='capsulePct' ? 'capsulePct' : 'completionPct';
-      const label = field==='capsulePct' ? 'Capsule Completion' : 'Core Completion';
-      const proceed = await confirmDialog(`This will match ${rows.length} rows by email against your ${masterData.length} pharmacists and update their ${label}. Continue?`);
-      if(!proceed){ input.value=''; return; }
-
-      masterData = await getShared(K_MASTER, []);
-      const byEmail = {};
-      rows.forEach(r=>{ byEmail[r.email] = r.pct; });
-      let matched = 0;
-      masterData = masterData.map(p=>{
-        const key = (p.email||'').trim().toLowerCase();
-        if(key && byEmail[key] !== undefined){
-          matched++;
-          return {...p, [field]: byEmail[key]};
-        }
-        return p;
-      });
-      const ok = await setShared(K_MASTER, masterData);
-      if(ok){
-        toast(`${label}: matched and updated ${matched} of ${masterData.length} pharmacists`,'ok');
-        renderMasterPreview();
-        renderTrainerTable();
-      }
-    }catch(err){
-      console.error(err);
-      toast('Error reading file: '+(err.message||''), 'err');
-    }
-    input.value = '';
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-async function apsFetch(action, params){
-  params = params || {};
-  const qs = Object.entries(Object.assign({action:action}, params)).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
-  const url = APP_CONFIG.COMPLETION_REPORTS_URL + '?' + qs + '&_t=' + Date.now();
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  return res.json();
-}
-function extractLearnerRate(l, totalModules){
-  let rate = l.completionRate;
-  if(l.modulesDone!==undefined && l.totalModules!==undefined && l.totalModules>0){
-    rate = Math.round((l.modulesDone / l.totalModules) * 100);
-  } else if(l.modulesCompleted!==undefined && totalModules>0){
-    rate = Math.round((l.modulesCompleted / totalModules) * 100);
-  } else if(typeof rate==='string'){
-    rate = parseInt(rate,10) || 0;
-  }
-  if(typeof rate!=='number' || isNaN(rate)) rate = 0;
-  return Math.min(100, Math.max(0, rate));
-}
-// Two completion columns, each pulled from its own LMS course: Core Completion (completionPct) and Capsule Completion
-// (capsulePct). The course chosen for each, and when it was last synced, are remembered in the training config.
-const COMPLETION_KINDS = {
-  core:    {field:'completionPct', label:'Core Completion', select:'completionCourseSelect', status:'completionSyncStatus', courseKey:'completionCourse', syncedKey:'completionLastSynced', defaultCourse:''},
-  capsule: {field:'capsulePct', label:'Capsule Completion', select:'capsuleCourseSelect', status:'capsuleSyncStatus', courseKey:'capsuleCourse', syncedKey:'capsuleLastSynced', defaultCourse:'Learning Capsule - Selling Opps. in Acne & Dry Skin Condition'}
-};
-const courseKey = s=>String(s||'').toLowerCase().replace(/[‒-―−]/g,'-').replace(/\s+/g,' ').trim();
-function completionStatusText(k){
-  const at = trainingConfig[k.syncedKey];
-  return at ? 'Last synced: '+new Date(at).toLocaleString('en-GB')+(trainingConfig[k.courseKey]?' — '+trainingConfig[k.courseKey]:'') : '';
-}
-async function loadCompletionCourseList(){
-  const kinds = Object.values(COMPLETION_KINDS);
-  kinds.forEach(k=>{ const sel = document.getElementById(k.select); if(sel) sel.innerHTML = `<option value="">Loading courses…</option>`; });
-  trainingConfig = await getShared(K_CONFIG, trainingConfig);
-  let courses = null;
-  try{ courses = (await apsFetch('meta')).courses || []; }
-  catch(err){ console.error(err); }
-  kinds.forEach(k=>{
-    const sel = document.getElementById(k.select), statusEl = document.getElementById(k.status);
-    if(!sel) return;
-    const saved = trainingConfig[k.courseKey] || '';
-    if(!courses){
-      sel.innerHTML = saved ? `<option value="${esc(saved)}" selected>${esc(saved)}</option>` : `<option value="">Could not connect</option>`;
-      if(statusEl) statusEl.textContent = 'Could not reach the Training Completion Reports source — check your internet connection.';
-      return;
-    }
-    // the saved course, else this column's default course (matched loosely), else nothing picked
-    const want = courseKey(saved || k.defaultCourse);
-    const pick = courses.find(c=>courseKey(c)===want) || '';
-    sel.innerHTML = `<option value="">-- Choose a course --</option>` + courses.map(c=>`<option value="${esc(c)}" ${c===pick?'selected':''}>${esc(c)}</option>`).join('');
-    if(!courses.length) sel.innerHTML = `<option value="">No courses found</option>`;
-    if(statusEl) statusEl.textContent = completionStatusText(k);
-  });
-}
-async function syncCompletionFromCourse(kind){
-  const k = COMPLETION_KINDS[kind] || COMPLETION_KINDS.core;
-  const sel = document.getElementById(k.select);
-  const statusEl = document.getElementById(k.status);
-  const courseName = sel ? sel.value : '';
-  if(!courseName){ toast(`Choose the course for ${k.label} first`,'err'); return; }
-  if(statusEl) statusEl.textContent = 'Syncing…';
-  try{
-    const data = await apsFetch('course', {name: courseName});
-    if(data.error) throw new Error(data.error);
-    const learners = data.learners || [];
-    const totalModules = data.totalModules || 0;
-    const byEmail = {};
-    learners.forEach(l=>{
-      const em = (l.email||'').toLowerCase().trim();
-      if(em) byEmail[em] = extractLearnerRate(l, totalModules);
-    });
-
-    masterData = await getShared(K_MASTER, []);
-    let matched = 0;
-    masterData = masterData.map(p=>{
-      const key = (p.email||'').trim().toLowerCase();
-      if(key && byEmail[key]!==undefined){
-        matched++;
-        return {...p, [k.field]: byEmail[key]};
-      }
-      return p;
-    });
-    const ok = await setShared(K_MASTER, masterData);
-
-    trainingConfig = await getShared(K_CONFIG, trainingConfig);
-    trainingConfig[k.courseKey] = courseName;
-    trainingConfig[k.syncedKey] = new Date().toISOString();
-    // the admin login may save only these two settings; the trainer's save also feeds the calendar undo history
-    if(isCoordinatorRole()) await setShared(K_CONFIG, trainingConfig); else await setConfigWithHistory(trainingConfig);
-
-    if(ok){
-      toast(`${k.label}: synced "${courseName}" — matched ${matched} of ${masterData.length} pharmacists`,'ok');
-      if(statusEl) statusEl.textContent = completionStatusText(k);
-      renderMasterPreview();
-      renderTrainerTable();
-    }
-  }catch(err){
-    console.error(err);
-    if(statusEl) statusEl.textContent = 'Sync failed — check your internet connection and try again.';
-    toast(`Could not sync ${k.label}: `+(err.message||''), 'err');
-  }
-}
 async function clearMasterData(){
   const n = masterData.length;
   if(!n){ toast('There is no pharmacist data to clear','info'); return; }
@@ -2576,14 +2433,15 @@ function trainerRowCells(p, rownum){
       <td class="no-truncate">${dateCellHtml(p, true, days, 'onTrainerAssignChange')}</td>
       <td class="email-cell">${esc(p.email||'—')}</td>
       <td class="name-cell">${esc(p.displayName)}</td>
-      <td class="col-export-skip">${completionCellHtml(p)}</td>
-      <td class="col-export-skip">${completionCellHtml(p, 'capsulePct')}</td>
+      <td class="col-export-skip">${courseSlotCellHtml(p, 'core')}</td>
+      <td class="col-export-skip">${courseSlotCellHtml(p, 'capsule')}</td>
       <td class="no-truncate col-export-skip">${attendanceCellHtml(p)}</td>
       <td class="col-export-skip">${noteCellHtml(p)}</td>`;
 }
 
 function renderTrainerTable(){
   document.getElementById('trainerTableTitle').textContent = trainerFilterState.date.size ? 'Filtered Records' : 'All Records';
+  updateCourseSlotHeaders();
   renderGroupMixBanner();
 
   let list = applyTrainerFilters(masterData);
@@ -2838,7 +2696,6 @@ const EDITABLE_FIELDS = [
   {key:'employeeId', label:'User/Employee ID', w:110},
   {key:'phone', label:'Phone (WhatsApp)', w:120},
   {key:'scfhs', label:'SCFHS', w:100},
-  {key:'completionPct', label:'Core Completion %', w:80},
   {key:'note', label:'Notes', w:200}
 ];
 let editDraft = null;   // {pid: {field: value}}
@@ -2885,7 +2742,6 @@ function collectEditSelectedChanges(){
     const name = d.displayName || p.displayName;
     if(!d.displayName) errors.push(`${esc(p.displayName)}: the pharmacist name can't be empty.`);
     if(!d.supervisor) errors.push(`${esc(name)}: the supervisor can't be empty.`);
-    if(d.completionPct!=='' && !(Number(d.completionPct)>=0 && Number(d.completionPct)<=100)) errors.push(`${esc(name)}: Completion % must be a number from 0 to 100, or blank.`);
     const em = d.email.toLowerCase();
     if(em){
       const owner = emailOwner.get(em);
@@ -2939,8 +2795,7 @@ async function confirmEditSelected(){
   if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
   changes.forEach(c=>{
     c.fieldChanges.forEach(fc=>{
-      if(fc.f.key==='completionPct' && fc.to==='') c.p.completionPct = null;   // null (not a missing field) tells the server to clear it
-      else c.p[fc.f.key] = fc.to;
+      c.p[fc.f.key] = fc.to;
     });
   });
   editDraft = null;

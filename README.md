@@ -6,10 +6,14 @@ Static front-end (GitHub Pages) + a **Supabase** backend (Postgres behind an Edg
 ```
 index.html            Landing page: Supervisor · Course Progress Reports · (trainer icon, bottom-right)
 supervisor.html       Supervisor page (pick your name → assign pharmacists, request additions/leave)
-trainer.html          Admins Dashboard (trainer page) — behind a sign-in (attendance, setup, approvals, analytics, calendar)
-assets/js/config.js   Every URL lives here (backend, LMS reports)
+trainer.html          Admins Dashboard (trainer page) — behind a sign-in (attendance, setup, approvals, analytics, calendar,
+                      Moodle Reports / SAP Reports / Reports Configuration for the superadmin and coordinators)
+reports.html          Public course progress reports (no sign-in; ?c=<share link> opens one course)
+assets/js/config.js   Every URL lives here (backend, landing-page links)
 assets/js/api.js      Backend client — sends only the records that changed
-assets/js/common.js   Helpers shared by both pages
+assets/js/common.js   Helpers shared by the pages
+assets/js/reports-admin.js  Moodle Reports engine + Reports Configuration (staff)
+assets/js/reports.js  The public reports page
 supabase/schema.sql   The database (run once)
 supabase/functions/   The `api` Edge Function — all reads/writes and all auth go through it
 dev/serve.ps1         Local static server

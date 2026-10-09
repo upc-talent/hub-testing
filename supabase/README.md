@@ -151,7 +151,7 @@ If a run fails, the Log gets a **FAILED** row with the reason (e.g. the Sheet is
 |---|---|
 | `coursesList`, `courseSave`, `courseShareRotate`, `courseSlotsSet`, `coursePublish`, `courseExport`, `lmsLearnersList` / `Upsert` / `Delete` | superadmin + coordinator (trainers are refused) |
 | `courseDelete` | superadmin only |
-| `reportsPublic`, `reportsPublicCourse {slug}` | anyone (no login) — read-only, emails masked, only the columns switched on are sent, 30 requests / minute / IP, cached 60 s |
+| `reportsPublic`, `reportsPublicCourse {slug}` | anyone (no login) — read-only, only the columns switched on are sent (full emails when the Email column is on), 30 requests / minute / IP, cached 60 s |
 
 New read key `course-slots` (Core / Capsule columns): staff get state, rate, date and finished flag per email; a
 supervisor gets only their own pharmacists' percentage. The roster no longer returns or writes `completion_pct` /
